@@ -2,7 +2,6 @@ package multifs
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"path"
@@ -67,10 +66,8 @@ func (m *MultiFS) idsSnapshot() []string {
 }
 
 func (m *MultiFS) split(name string) (id, subpath string, err error) {
-	// Normalize
 	name = path.Clean(name)
 
-	// Make it tolerant of leading slash (e.g. Open("/"), Open("/one/file"))
 	name = strings.TrimPrefix(name, "/")
 	name = strings.TrimPrefix(name, "./")
 
@@ -79,7 +76,7 @@ func (m *MultiFS) split(name string) (id, subpath string, err error) {
 		return "", ".", nil
 	}
 
-	// still forbid attempts to escape
+	// forbid attempts to escape
 	if name == ".." || strings.HasPrefix(name, "../") {
 		return "", "", fs.ErrNotExist
 	}
@@ -107,7 +104,6 @@ func (m *MultiFS) Open(name string) (fs.File, error) {
 	}
 
 	if id == "" {
-		// synthetic global root listing all ids
 		return newRootDir(m.idsSnapshot()), nil
 	}
 
@@ -116,9 +112,6 @@ func (m *MultiFS) Open(name string) (fs.File, error) {
 		return nil, fs.ErrNotExist
 	}
 
-	fmt.Println("Opening snapshot root dir for ID", id, subpath)
-
-	// Normal delegated open inside that snapshot
 	return subfs.Open("/" + subpath)
 }
 
@@ -187,7 +180,6 @@ func (m *MultiFS) Stat(name string) (fs.FileInfo, error) {
 }
 
 func (m *MultiFS) ReadDir(name string) ([]fs.DirEntry, error) {
-	fmt.Println("Reading snapshot root dir")
 	f, err := m.Open(name)
 	if err != nil {
 		return nil, err
