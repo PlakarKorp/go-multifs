@@ -2,6 +2,7 @@ package multifs
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"path"
@@ -70,11 +71,7 @@ func (m *MultiFS) split(name string) (id, subpath string, err error) {
 	name = path.Clean(name)
 
 	// Make it tolerant of leading slash (e.g. Open("/"), Open("/one/file"))
-	if strings.HasPrefix(name, "/") {
-		name = strings.TrimPrefix(name, "/")
-	}
-
-	// Also tolerate "./"
+	name = strings.TrimPrefix(name, "/")
 	name = strings.TrimPrefix(name, "./")
 
 	// Root?
@@ -119,13 +116,10 @@ func (m *MultiFS) Open(name string) (fs.File, error) {
 		return nil, fs.ErrNotExist
 	}
 
-	// Root of that snapshot: "/<id>/" or "id"
-	if subpath == "." {
-		return newSnapshotRootDir(subfs), nil
-	}
+	fmt.Println("Opening snapshot root dir for ID", id, subpath)
 
 	// Normal delegated open inside that snapshot
-	return subfs.Open(subpath)
+	return subfs.Open("/" + subpath)
 }
 
 type rootDir struct {
@@ -193,6 +187,7 @@ func (m *MultiFS) Stat(name string) (fs.FileInfo, error) {
 }
 
 func (m *MultiFS) ReadDir(name string) ([]fs.DirEntry, error) {
+	fmt.Println("Reading snapshot root dir")
 	f, err := m.Open(name)
 	if err != nil {
 		return nil, err
@@ -204,49 +199,4 @@ func (m *MultiFS) ReadDir(name string) ([]fs.DirEntry, error) {
 		return nil, errors.New("not a directory")
 	}
 	return dir.ReadDir(-1)
-}
-
-type snapshotRootDir struct {
-	fs  fs.FS
-	pos int
-	buf []fs.DirEntry
-}
-
-func newSnapshotRootDir(f fs.FS) *snapshotRootDir {
-	return &snapshotRootDir{fs: f}
-}
-
-// Make sure it implements fs.File and fs.ReadDirFile
-var _ fs.File = (*snapshotRootDir)(nil)
-var _ fs.ReadDirFile = (*snapshotRootDir)(nil)
-
-func (d *snapshotRootDir) Stat() (fs.FileInfo, error) {
-	// Just say "directory"; name doesn't matter much here
-	return dirInfo{name: "."}, nil
-}
-
-func (d *snapshotRootDir) Read([]byte) (int, error) { return 0, io.EOF }
-func (d *snapshotRootDir) Close() error             { return nil }
-
-func (d *snapshotRootDir) ReadDir(n int) ([]fs.DirEntry, error) {
-	// Load children once
-	if d.buf == nil {
-		entries, err := fs.ReadDir(d.fs, ".")
-		if err != nil {
-			return nil, err
-		}
-		d.buf = entries
-	}
-
-	if d.pos >= len(d.buf) && n > 0 {
-		return nil, io.EOF
-	}
-
-	if n <= 0 || n > len(d.buf)-d.pos {
-		n = len(d.buf) - d.pos
-	}
-
-	out := d.buf[d.pos : d.pos+n]
-	d.pos += n
-	return out, nil
 }
