@@ -66,13 +66,24 @@ func (m *MultiFS) idsSnapshot() []string {
 }
 
 func (m *MultiFS) split(name string) (id, subpath string, err error) {
+	// Normalize
 	name = path.Clean(name)
+
+	// Make it tolerant of leading slash (e.g. Open("/"), Open("/one/file"))
+	if strings.HasPrefix(name, "/") {
+		name = strings.TrimPrefix(name, "/")
+	}
+
+	// Also tolerate "./"
 	name = strings.TrimPrefix(name, "./")
 
+	// Root?
 	if name == "" || name == "." {
 		return "", ".", nil
 	}
-	if name == ".." || strings.HasPrefix(name, "../") || path.IsAbs(name) {
+
+	// still forbid attempts to escape
+	if name == ".." || strings.HasPrefix(name, "../") {
 		return "", "", fs.ErrNotExist
 	}
 
